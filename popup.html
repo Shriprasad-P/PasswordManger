@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DPM</title>
+    <style>
+      body { margin: 0; padding: 12px; width: 360px; font-family: sans-serif; background: #f4f6fb; color: #1f2937; }
+      .panel { background: #fff; border: 1px solid #dbe3f0; border-radius: 10px; padding: 10px; margin-bottom: 10px; }
+      .hidden { display: none; }
+      .header-row { display: flex; align-items: center; justify-content: space-between; }
+      .identity { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+      .avatar { width: 30px; height: 30px; border-radius: 50%; background: #dbeafe; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+      input, button { width: 100%; border-radius: 8px; border: 1px solid #cfd8e6; padding: 8px; font-size: 13px; margin-top: 5px; box-sizing: border-box; }
+      button { cursor: pointer; background: #2563eb; color: #fff; border: none; font-weight: 600; }
+      #credentials { display: grid; gap: 8px; }
+      .cred { border: 1px solid #dbe3f0; border-radius: 8px; padding: 8px; background: #f9fbff; }
+      .cred strong { display: block; font-size: 13px; }
+      .cred span { display: block; font-size: 12px; color: #4b5563; }
+      .cred-actions { display: flex; gap: 5px; margin-top: 5px; }
+      .cred-action-btn { font-size: 10px; padding: 4px; background: #e5e7eb; color: #000; width: auto; }
+    </style>
+  </head>
+  <body>
+    <h3>Decentralized Passwords</h3>
+    <div id="onboardingPanel" class="panel hidden">
+      <input id="onboardingName" placeholder="Name" />
+      <input id="onboardingEmail" placeholder="Email" />
+      <input id="onboardingMasterPassword" type="password" placeholder="Master Password" />
+      <button id="onboardingSaveBtn">Create Vault</button>
+    </div>
+    <div id="lockedPanel" class="panel hidden">
+      <input id="lockedMasterPassword" type="password" placeholder="Master Password" />
+      <button id="unlockBtn">Unlock</button>
+    </div>
+    <div id="dashboardPanel" class="hidden">
+      <div class="panel header-row">
+        <div class="identity"><div class="avatar">👤</div><div><strong id="headerName"></strong><br/><span id="headerEmail"></span></div></div>
+        <button id="lockBtn" style="width:auto">Lock</button>
+      </div>
+      <div class="panel">
+        <strong>Credentials</strong>
+        <div id="credentials"></div>
+      </div>
+      <div class="panel">
+        <strong>Add New</strong>
+        <input id="site" placeholder="Site (example.com)" />
+        <input id="username" placeholder="Username" />
+        <input id="password" type="password" placeholder="Password" />
+        <button id="addBtn">Add</button>
+      </div>
+    </div>
+    <div id="status" style="font-size:11px;color:red;text-align:center"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>
