@@ -1,55 +1,71 @@
-# Decentralized Password Manager
+# Decentralized Password Manager 🛡️🛰️⚖️
 
-> Cross-browser local-first password manager with encrypted vault architecture.
+> A professional, cross-browser, local-first password manager with real-time P2P synchronization and security auditing.
 
-## Overview
-The **Decentralized Password Manager** is a secure, browser-based extension that stores your passwords locally on your device. Unlike traditional password managers that sync data to a central cloud server, this extension keeps your data entirely within your control.
+## 🚀 Overview
+The **Decentralized Password Manager** is a sovereign security tool that puts users back in control of their digital identities. Unlike traditional cloud-based managers (e.g., LastPass, 1Password) that store your data on centralized servers, this extension ensures your vault lives only where you want it: on your own devices.
 
-## Features
-- **🔒 Local-First Security**: Your vault is encrypted and stored locally in your browser. No data ever leaves your device.
-- **🛡️ Strong Encryption**: Built on Web Crypto API standards using **PBKDF2** for key derivation and **AES-GCM (256-bit)** for encryption.
-- **⚡ Auto-Fill & Capture**: Smartly detects login forms to auto-fill credentials and prompts to save new passwords securely.
-- **🔑 Password Generator**: Integrated strong password generator to create unique, secure passwords for every site.
-- **👤 Identity Management**: Maintain a secure identity profile associated with your vault.
-- **🌐 Cross-Browser Ready**: Compatible with Chrome, Edge, Brave, and Firefox (Gecko).
+---
 
-## Installation
+## 🌟 Advanced Features
+
+### 🛰️ True P2P Synchronization
+Built with **GunDB**, a decentralized graph database. Your encrypted vault is synced across your devices via a global peer-to-peer mesh. There is **no central server** to hack, and no company ever sees your metadata.
+
+### 🩺 Real-Time Security Audit
+The "Security Inspector" automatically scans your vault every time you open it:
+- **✅ Secure Badge**: High-entropy, unique passwords.
+- **⚠️ Weak Badge**: Short or simple passwords that are easy to crack.
+- **🚨 Reused Badge**: Alerts you if you use the same password across multiple sites (the #1 cause of account takeovers).
+
+### ⚡ Professional UX
+- **Chrome-Style Auto-Fill**: Injects a floating DPM menu directly into website login fields for one-click access.
+- **👁️ Hover-to-Reveal**: Masked passwords instantly reveal themselves when you hover your mouse over them in the vault.
+- **🔍 Global Search**: Find any credential in milliseconds using the integrated search bar.
+- **📂 Categorization**: Organize your digital life into **Work**, **Personal**, **Social**, and **Finance** tags.
+- **🎲 Smart Generator**: Automatically suggests and fills high-security random passwords for new signups.
+
+---
+
+## 🔒 Security Architecture
+
+### 1. Zero-Knowledge Design
+Your **Master Password** is the only key to your vault. It is never stored, never logged, and never leaves your browser. If you lose it, your data is gone forever—that is the price of true sovereignty.
+
+### 2. Industry-Standard Cryptography
+- **KDF**: PBKDF2-HMAC-SHA256 with **310,000 iterations** for extreme brute-force resistance.
+- **Encryption**: **AES-256-GCM** (Authenticated Encryption) ensures that your data cannot be read OR tampered with.
+- **Privacy**: Only the encrypted "blob" enters the P2P sync network.
+
+---
+
+## 🛠️ Installation
 
 ### For Developers (Load Unpacked)
-1. Clone this repository to your local machine.
+1. Clone this repository:
    ```bash
    git clone https://github.com/Shriprasad-P/PasswordManger.git
    ```
 2. Open your browser's extension management page:
-   - **Chrome/Edge/Brave**: Go to `chrome://extensions`
-   - **Firefox**: Go to `about:debugging` -> `This Firefox`
-3. Enable **Developer mode** (usually a toggle in the top right corner).
-4. Click **Load unpacked** (or "Load Temporary Add-on" in Firefox).
-5. Select the `Decentralized_Password_Manager` directory.
+   - **Chrome/Edge/Brave**: `chrome://extensions`
+   - **Firefox**: `about:debugging`
+3. Enable **Developer mode**.
+4. Click **Load unpacked** and select the project folder.
 
-## Security Architecture
+### 🚀 Getting Started
+1. Click the DPM icon in your toolbar.
+2. Complete the **Onboarding** (Name, Email, Master Password).
+3. Refresh your tabs to see the **DPM Shield** appear in login fields!
 
-We take security seriously. Here is how your data is protected:
+---
 
-1. **Master Password**: Your master password acts as the key to your vault. It is **never stored** anywhere (not even in local storage).
-2. **Key Derivation (PBKDF2)**:
-   - When you unlock your vault, your master password is run through **PBKDF2** with **SHA-256**.
-   - We use a unique salt and **310,000 iterations** to derive the cryptographic key, making brute-force attacks computationally expensive.
-3. **Encryption (AES-GCM)**:
-   - The derived key is used to encrypt your vault data using **AES-GCM** (Advanced Encryption Standard - Galois/Counter Mode).
-   - This ensures both the confidentiality and integrity of your data.
-4. **Storage**:
-   - Only the encrypted "blob" (ciphertext, salt, and IV) is stored in `chrome.storage.local`.
-   - Without the master password, this data is just random noise.
+## 📁 Project Structure
+- **`manifest.json`**: Manifest V3 configuration for all major browsers.
+- **`background.js`**: The "Brain" - handles P2P sync, crypto operations, and session state.
+- **`content.js`**: The "Eyes" - handles DOM injection, floating menus, and auto-fill logic.
+- **`crypto.js`**: Core cryptographic wrapper for the Web Crypto API.
+- **`identity.js`**: Modular user profile and onboarding management.
+- **`gun.js`**: Decentralized P2P database client.
 
-## Project Structure
-
-- **`manifest.json`**: Extension configuration (Manifest V3). Defines permissions and entry points.
-- **`background.js`**: The central service worker. Manages state (locked/unlocked), handles crypto operations, and coordinates between storage and the UI.
-- **`content.js`**: Runs on web pages to handle DOM interactions (injecting icons, filling forms, displaying save prompts).
-- **`crypto.js`**: A wrapper around the `SubtleCrypto` API handling all encryption and decryption logic.
-- **`identity.js`**: Manages the user identity profile logic.
-- **`popup.html` / `popup.js`**: The actual extension interface user sees when clicking the toolbar icon.
-
-## License
-MIT
+## 📄 License
+MIT — Created with ❤️ and 🤖 inside **OpenClaw**.
