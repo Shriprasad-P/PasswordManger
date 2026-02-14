@@ -1,5 +1,9 @@
-importScripts("crypto.js");
-importScripts("gun.js");
+try {
+  importScripts("crypto.js");
+  importScripts("gun.js");
+} catch (e) {
+  console.log("Worker imports skipped or failed:", e);
+}
 
 const STORAGE_KEY = "dpm_encrypted_blob";
 const IDENTITY_STORAGE_KEY = "dpm_user_identity";
