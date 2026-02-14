@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Decentralized Password Manager",
   "description": "Cross-browser local-first password manager with encrypted vault architecture.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "permissions": ["storage", "tabs"],
   "host_permissions": ["<all_urls>"],
   "icons": {
@@ -22,7 +22,7 @@
     }
   },
   "background": {
-    "scripts": ["crypto.js", "gun.js", "background.js"]
+    "service_worker": "background.js"
   },
   "web_accessible_resources": [
     {
