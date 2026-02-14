@@ -68,4 +68,5 @@ Your **Master Password** is the only key to your vault. It is never stored, neve
 - **`gun.js`**: Decentralized P2P database client.
 
 ## 📄 License
-MIT — Created with ❤️ and 🤖 inside **OpenClaw**.
+MIT
+.
