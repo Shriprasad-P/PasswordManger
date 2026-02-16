@@ -7,22 +7,11 @@ const ui = {
   headerName: document.getElementById("headerName"),
   headerEmail: document.getElementById("headerEmail"),
   credentialSearch: document.getElementById("credentialSearch"),
-  category: document.getElementById("category"),
-  useBiometricsToggle: document.getElementById("useBiometricsToggle"),
-  registerBiometricBtn: document.getElementById("registerBiometricBtn"),
-  onboardingRegisterBiometricBtn: document.getElementById("onboardingRegisterBiometricBtn"),
-  biometricStatusHint: document.getElementById("biometricStatusHint"),
-  biometricOverlay: document.getElementById("biometricOverlay"),
-  biometricVerifyBtn: document.getElementById("biometricVerifyBtn"),
-  biometricCancelBtn: document.getElementById("biometricCancelBtn")
+  category: document.getElementById("category")
 };
 
 const state = {
-  credentials: [],
-  biometricsEnabled: false,
-  biometricsRegistered: false,
-  biometricCredentialId: "",
-  pendingBiometricPrompt: false
+  credentials: []
 };
 
 function setView(view) {
@@ -37,60 +26,16 @@ async function api(type, data = {}) {
   });
 }
 
-function randomBytes(length) {
-  const arr = new Uint8Array(length);
-  crypto.getRandomValues(arr);
-  return arr;
-}
-
-function toBase64Url(input) {
-  const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
-  let binary = "";
-  bytes.forEach((b) => { binary += String.fromCharCode(b); });
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-function fromBase64Url(value) {
-  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = base64 + "===".slice((base64.length + 3) % 4);
-  const binary = atob(padded);
-  return Uint8Array.from(binary, (c) => c.charCodeAt(0));
-}
-
-function updateBiometricUI() {
-  if (!ui.useBiometricsToggle || !ui.biometricStatusHint) return;
-  ui.useBiometricsToggle.checked = state.biometricsEnabled;
-  ui.biometricStatusHint.textContent = state.biometricsRegistered
-    ? (state.biometricsEnabled ? "Biometric autofill verification is enabled." : "Biometrics are registered but currently disabled.")
-    : "Biometric auth is not registered.";
-}
-
-function setBiometricOverlay(visible) {
-  ui.biometricOverlay?.classList.toggle("show", !!visible);
-}
-
 async function refresh() {
   ui.status.textContent = "";
   const status = await api("GET_STATUS");
-  state.biometricsEnabled = !!status.biometricsEnabled;
-  state.biometricsRegistered = !!status.biometricsRegistered;
-  state.biometricCredentialId = status.biometricCredentialId || "";
-  state.pendingBiometricPrompt = !!status.pendingBiometricPrompt;
 
   if (status.needsOnboarding) {
     setView("onboarding");
-    setBiometricOverlay(false);
     return;
   }
   if (!status.unlocked) {
     setView("locked");
-    setBiometricOverlay(false);
-    
-    // Proactive Biometric Unlock on popup open
-    if (state.biometricsEnabled && state.biometricsRegistered) {
-      ui.status.textContent = "Authenticating with system...";
-      verifyBiometrics(); 
-    }
     return;
   }
 
@@ -102,8 +47,6 @@ async function refresh() {
   const creds = await api("LIST_CREDENTIALS");
   state.credentials = creds.credentials || [];
   renderCredentials();
-  updateBiometricUI();
-  setBiometricOverlay(state.pendingBiometricPrompt && state.biometricsEnabled && state.biometricsRegistered);
 }
 
 window.copyPass = (pass) => {
@@ -204,94 +147,6 @@ function renderCredentials() {
   });
 }
 
-async function registerBiometrics() {
-  if (!window.PublicKeyCredential || !navigator.credentials?.create) {
-    ui.status.textContent = "WebAuthn is not available on this browser/device.";
-    return;
-  }
-
-  const onboardingName = document.getElementById("onboardingName")?.value?.trim() || "DPM User";
-  const onboardingEmail = document.getElementById("onboardingEmail")?.value?.trim();
-  const identity = await api("GET_IDENTITY");
-  const name = identity?.name || onboardingName;
-  const email = identity?.email || onboardingEmail || `user-${Date.now()}@dpm.local`;
-
-  try {
-    const credential = await navigator.credentials.create({
-      publicKey: {
-        challenge: randomBytes(32),
-        rp: { name: "Decentralized Password Manager" },
-        user: {
-          id: randomBytes(16),
-          name: email,
-          displayName: name
-        },
-        pubKeyCredParams: [
-          { type: "public-key", alg: -7 },
-          { type: "public-key", alg: -257 }
-        ],
-        authenticatorSelection: {
-          authenticatorAttachment: "platform",
-          residentKey: "preferred",
-          userVerification: "required"
-        },
-        timeout: 60000,
-        attestation: "none"
-      }
-    });
-
-    const credentialId = toBase64Url(new Uint8Array(credential.rawId));
-    const saveRes = await api("REGISTER_BIOMETRIC_CREDENTIAL", { credentialId });
-    if (!saveRes.ok) {
-      ui.status.textContent = saveRes.error || "Failed to save biometric credential.";
-      return;
-    }
-
-    await api("SET_BIOMETRIC_ENABLED", { enabled: true });
-    ui.status.textContent = "Biometrics registered.";
-    refresh();
-  } catch (error) {
-    ui.status.textContent = error?.message || "Biometric registration failed.";
-  }
-}
-
-async function verifyBiometrics() {
-  if (!window.PublicKeyCredential || !navigator.credentials?.get) {
-    ui.status.textContent = "WebAuthn verification is unavailable.";
-    return;
-  }
-  if (!state.biometricCredentialId) {
-    ui.status.textContent = "No biometric credential registered.";
-    return;
-  }
-
-  try {
-    const assertion = await navigator.credentials.get({
-      publicKey: {
-        challenge: randomBytes(32),
-        allowCredentials: [{ type: "public-key", id: fromBase64Url(state.biometricCredentialId) }],
-        userVerification: "required",
-        timeout: 60000
-      }
-    });
-
-    const verifyRes = await api("BIOMETRIC_VERIFY", {
-      credentialId: toBase64Url(new Uint8Array(assertion.rawId))
-    });
-
-    if (!verifyRes.ok) {
-      ui.status.textContent = verifyRes.error || "Biometric verification failed.";
-      return;
-    }
-
-    ui.status.textContent = "Biometric verification complete.";
-    setBiometricOverlay(false);
-    refresh();
-  } catch (error) {
-    ui.status.textContent = error?.message || "Biometric verification canceled.";
-  }
-}
-
 document.getElementById("onboardingSaveBtn").onclick = async () => {
   const pass = document.getElementById("onboardingMasterPassword").value;
   const name = document.getElementById("onboardingName").value;
@@ -304,13 +159,6 @@ document.getElementById("onboardingSaveBtn").onclick = async () => {
 
   await api("UNLOCK", { masterPassword: pass });
   await api("SET_IDENTITY", { name, email });
-
-  // Auto-register Biometrics if available on the system
-  if (window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()) {
-    ui.status.textContent = "Linking system biometrics...";
-    await registerBiometrics();
-  }
-
   refresh();
 };
 
@@ -345,37 +193,6 @@ document.getElementById("addBtn").onclick = async () => {
   refresh();
 };
 
-ui.onboardingRegisterBiometricBtn?.addEventListener("click", registerBiometrics);
-ui.registerBiometricBtn?.addEventListener("click", registerBiometrics);
-
-ui.useBiometricsToggle?.addEventListener("change", async () => {
-  if (ui.useBiometricsToggle.checked && !state.biometricsRegistered) {
-    ui.useBiometricsToggle.checked = false;
-    ui.status.textContent = "Register biometrics first.";
-    return;
-  }
-  const res = await api("SET_BIOMETRIC_ENABLED", { enabled: ui.useBiometricsToggle.checked });
-  if (!res.ok) {
-    ui.status.textContent = res.error || "Unable to update biometric setting.";
-    return;
-  }
-  refresh();
-});
-
-ui.biometricVerifyBtn?.addEventListener("click", verifyBiometrics);
-ui.biometricCancelBtn?.addEventListener("click", () => setBiometricOverlay(false));
 ui.credentialSearch?.addEventListener("input", renderCredentials);
-
-setInterval(async () => {
-  const status = await api("GET_STATUS");
-  state.biometricsEnabled = !!status.biometricsEnabled;
-  state.biometricsRegistered = !!status.biometricsRegistered;
-  state.biometricCredentialId = status.biometricCredentialId || state.biometricCredentialId;
-  state.pendingBiometricPrompt = !!status.pendingBiometricPrompt;
-  updateBiometricUI();
-  if (!ui.dashboard.classList.contains("hidden")) {
-    setBiometricOverlay(state.pendingBiometricPrompt && state.biometricsEnabled && state.biometricsRegistered);
-  }
-}, 1500);
 
 refresh();

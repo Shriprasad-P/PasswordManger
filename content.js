@@ -2,6 +2,7 @@ const ICON_SRC = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' v
 const KEY_ICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%239ca3af' d='M14.59 2a7 7 0 0 0-5.53 11.29L2 20.34V22h1.66l2.31-2.31v-1.66h1.66l2.31-2.31h1.66l1.05-1.05A7 7 0 1 0 14.59 2zm0 10A3 3 0 1 1 17.6 9a3 3 0 0 1-3.01 3z'/%3E%3C/svg%3E";
 let activeMenu = null;
 let activeSavePrompt = null;
+let proactiveMenuShown = false;
 
 function fillInput(input, value) {
   if (!input) return;
@@ -11,12 +12,37 @@ function fillInput(input, value) {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-function createMenu(input, res) {
+function findUsernameField(anchorInput) {
+  if (!anchorInput) return null;
+  const form = anchorInput.form;
+  const selector = 'input[type="email"], input[name*="email" i], input[name*="user" i], input[autocomplete="username"], input[type="text"]';
+  const formField = form?.querySelector(selector);
+  if (formField) return formField;
+  return document.querySelector(selector);
+}
+
+function findPasswordField(anchorInput) {
+  if (!anchorInput) return null;
+  if (anchorInput.type === "password") return anchorInput;
+  const formPass = anchorInput.form?.querySelector('input[type="password"]');
+  if (formPass) return formPass;
+  return document.querySelector('input[type="password"]');
+}
+
+function fillCredential(anchorInput, credential) {
+  if (!credential) return;
+  const userField = findUsernameField(anchorInput);
+  const passField = findPasswordField(anchorInput);
+  if (userField && credential.username) fillInput(userField, credential.username);
+  if (passField) fillInput(passField, credential.password);
+}
+
+function createMenu(input, res, options = {}) {
   if (activeMenu) activeMenu.remove();
-  
+
   const menu = document.createElement("div");
   menu.style = `position:fixed;z-index:999999;background:white;border:1px solid #ddd;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);padding:8px;width:240px;font-family:sans-serif;font-size:13px;`;
-  
+
   const rect = input.getBoundingClientRect();
   menu.style.top = (rect.bottom + 5) + "px";
   menu.style.left = rect.left + "px";
@@ -24,11 +50,10 @@ function createMenu(input, res) {
   if (res.credential) {
     const item = document.createElement("div");
     item.style = "padding:8px;cursor:pointer;border-bottom:1px solid #eee;display:flex;flex-direction:column;";
-    item.innerHTML = `<strong style="color:#2563eb">${res.credential.site}</strong><span style="font-size:11px;color:#666">${res.credential.username}</span>`;
+    const title = options.proactive ? "Fill Saved Credential" : res.credential.site;
+    item.innerHTML = `<strong style="color:#2563eb">${title}</strong><span style="font-size:11px;color:#666">${res.credential.username || ""}</span>`;
     item.onclick = () => {
-      fillInput(input, res.credential.password);
-      const userField = document.querySelector('input[type="text"], input[type="email"]');
-      if (userField) fillInput(userField, res.credential.username);
+      fillCredential(input, res.credential);
       menu.remove();
     };
     menu.appendChild(item);
@@ -62,7 +87,6 @@ function createMenu(input, res) {
         generateRes.password
       );
       
-      // Keep menu open for 3 seconds so user can see/write down password
       setTimeout(() => { if(activeMenu === menu) menu.remove(); }, 4000);
     });
   };
@@ -182,13 +206,39 @@ function scan() {
 
     icon.onclick = (e) => {
       e.preventDefault();
-      chrome.runtime.sendMessage({ type: "GET_CREDENTIAL_FOR_URL", url: window.location.href }, (res) => createMenu(input, res));
+      chrome.runtime.sendMessage({ type: "GET_CREDENTIAL_FOR_URL", url: window.location.href }, (res) => createMenu(input, res || {}));
     };
 
     document.body.appendChild(icon);
     window.addEventListener("scroll", updatePos);
     window.addEventListener("resize", updatePos);
     updatePos();
+  });
+
+  if (!proactiveMenuShown) maybeShowProactiveMenu();
+}
+
+function getLoginAnchorField() {
+  const forms = Array.from(document.querySelectorAll("form"));
+  for (const form of forms) {
+    const pass = form.querySelector('input[type="password"]');
+    if (!pass) continue;
+    const user = form.querySelector('input[type="email"], input[name*="email" i], input[name*="user" i], input[autocomplete="username"], input[type="text"]');
+    if (user) return user;
+    return pass;
+  }
+  const loosePass = document.querySelector('input[type="password"]');
+  if (!loosePass) return null;
+  return findUsernameField(loosePass) || loosePass;
+}
+
+function maybeShowProactiveMenu() {
+  const anchor = getLoginAnchorField();
+  if (!anchor) return;
+  chrome.runtime.sendMessage({ type: "GET_CREDENTIAL_FOR_URL", url: window.location.href }, (res) => {
+    if (!res?.credential) return;
+    proactiveMenuShown = true;
+    createMenu(anchor, { ...res }, { proactive: true });
   });
 }
 

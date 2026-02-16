@@ -166,6 +166,13 @@ function generatePassword(length = 16) {
     .join("");
 }
 
+function siteMatchesHost(site, host) {
+  const normalizedSite = String(site || "").toLowerCase().replace(/^www\./, "");
+  const normalizedHost = String(host || "").toLowerCase().replace(/^www\./, "");
+  if (!normalizedSite || !normalizedHost) return false;
+  return normalizedHost === normalizedSite || normalizedHost.endsWith(`.${normalizedSite}`);
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     try {
@@ -174,7 +181,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           await ensureIdentityLoaded();
           const record = await chrome.storage.local.get(STORAGE_KEY);
           const needsOnboarding = !sessionState.identity.name || !sessionState.identity.email;
-          sendResponse({ ok: true, unlocked: sessionState.unlocked, hasVault: !!record[STORAGE_KEY], needsOnboarding });
+          sendResponse({
+            ok: true,
+            unlocked: sessionState.unlocked,
+            hasVault: !!record[STORAGE_KEY],
+            needsOnboarding
+          });
           break;
 
         case "UNLOCK":
@@ -237,7 +249,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case "GET_CREDENTIAL_FOR_URL":
           if (!sessionState.unlocked) return sendResponse({ ok: false, error: "Locked" });
           const url = new URL(message.url).hostname.replace("www.", "");
-          const match = sessionState.vault.find(c => c.site.includes(url));
+          const match = sessionState.vault.find((c) => siteMatchesHost(c.site, url));
           sendResponse({ ok: true, credential: match || null });
           break;
 
