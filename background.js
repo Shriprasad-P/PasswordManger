@@ -173,6 +173,16 @@ function siteMatchesHost(site, host) {
   return normalizedHost === normalizedSite || normalizedHost.endsWith(`.${normalizedSite}`);
 }
 
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === "popup") {
+    port.onDisconnect.addListener(() => {
+      sessionState.unlocked = false;
+      sessionState.masterPassword = null;
+      sessionState.vault = [];
+    });
+  }
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     try {

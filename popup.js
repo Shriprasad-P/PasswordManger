@@ -195,4 +195,7 @@ document.getElementById("addBtn").onclick = async () => {
 
 ui.credentialSearch?.addEventListener("input", renderCredentials);
 
+// Establish a persistent connection to lock the vault when the popup closes
+chrome.runtime.connect({ name: "popup" });
+
 refresh();
