@@ -20,7 +20,7 @@ const sessionState = {
   vault: [],
   identity: { name: "", email: "" },
   identityLoaded: false,
-  siteHints: [] // Array of hashed hostnames
+  siteHints: []
 };
 
 let gunInstance = null;
@@ -51,9 +51,14 @@ async function ensureIdentityLoaded() {
 
 async function saveEncryptedVault(vault, masterPassword) {
   const payload = { vault, metadata: { updatedAt: new Date().toISOString(), identity: sessionState.identity } };
+  
+  // FIX: Handle cases where PasswordCrypto might not be immediately available in Service Worker
+  if (typeof PasswordCrypto === "undefined") {
+    throw new Error("Cryptographic engine is not loaded yet.");
+  }
+
   const encryptedBlob = await PasswordCrypto.encryptJson(payload, masterPassword);
   
-  // Update hints (hashed hostnames) to allow proactive popups while locked
   const hints = [];
   for (const c of vault) {
     const host = (c.site || "").toLowerCase().replace(/^www\./, "");
@@ -104,6 +109,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case "UNLOCK":
           const data = await chrome.storage.local.get(STORAGE_KEY);
           if (!data[STORAGE_KEY]) {
+            // First time unlock/creation
             sessionState.unlocked = true;
             sessionState.masterPassword = message.masterPassword;
             sessionState.vault = [];
@@ -122,7 +128,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break;
 
         case "VERIFY_MASTER_PASSWORD":
-          // Special case: check password against the stored blob
           const vData = await chrome.storage.local.get(STORAGE_KEY);
           if (!vData[STORAGE_KEY]) return sendResponse({ ok: false, error: "No vault found" });
           try {
@@ -135,24 +140,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         case "GET_CREDENTIAL_FOR_URL":
           const host = new URL(message.url).hostname.replace("www.", "").toLowerCase();
-          
-          // Case 1: Vault is unlocked - return full credential
           if (sessionState.unlocked) {
             const match = sessionState.vault.find(c => siteMatchesHost(c.site, host));
             return sendResponse({ ok: true, credential: match || null, locked: false });
           }
-          
-          // Case 2: Vault is locked - check hints
           const hashedHost = await hashString(host);
           if (sessionState.siteHints.includes(hashedHost)) {
             return sendResponse({ ok: true, credential: { site: host, username: "Saved Account" }, locked: true });
           }
-          
           sendResponse({ ok: true, credential: null });
           break;
 
         case "FETCH_AND_FILL":
-          // Used after a successful re-auth on a locked vault
           const fData = await chrome.storage.local.get(STORAGE_KEY);
           try {
             const decrypted = await PasswordCrypto.decryptJson(fData[STORAGE_KEY].encryptedBlob, message.password);
@@ -164,8 +163,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
           break;
 
+        case "SET_IDENTITY":
+          sessionState.identity = { name: message.name, email: message.email };
+          await chrome.storage.local.set({ [IDENTITY_STORAGE_KEY]: sessionState.identity });
+          // Ensure we sync or initialize the vault upon identity creation
+          if (sessionState.unlocked && sessionState.masterPassword) {
+            await saveEncryptedVault(sessionState.vault, sessionState.masterPassword);
+          }
+          await startP2PSyncListener();
+          sendResponse({ ok: true });
+          break;
+
+        case "GET_IDENTITY":
+          sendResponse({ ok: true, name: sessionState.identity.name, email: sessionState.identity.email });
+          break;
+
+        case "LIST_CREDENTIALS":
+          sendResponse({ ok: true, credentials: sessionState.vault });
+          break;
+
         case "ADD_CREDENTIAL":
-          if (!sessionState.unlocked) return sendResponse({ ok: false, error: "Locked" });
+          if (!sessionState.unlocked || !sessionState.masterPassword) return sendResponse({ ok: false, error: "Locked" });
           sessionState.vault.push({ id: crypto.randomUUID(), ...message.credential });
           await saveEncryptedVault(sessionState.vault, sessionState.masterPassword);
           sendResponse({ ok: true });
@@ -186,7 +204,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         default: sendResponse({ ok: false });
       }
-    } catch (e) { sendResponse({ ok: false, error: e.message }); }
+    } catch (e) { 
+      console.error("Background message error:", e);
+      sendResponse({ ok: false, error: e.message }); 
+    }
   })();
   return true;
 });
@@ -206,7 +227,6 @@ async function startP2PSyncListener() {
   gun.get(path).on(async (blob) => {
     if (blob && blob !== lastSyncedBlob) {
       lastSyncedBlob = blob;
-      // Note: This triggers a lock/sync flow usually, but we'll keep it simple for now
     }
   });
 }
