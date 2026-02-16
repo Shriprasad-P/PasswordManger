@@ -89,6 +89,12 @@ function showUnlockOverlay(onSuccess) {
   cancel.onclick = () => overlay.remove();
 }
 
+function isRegistrationPage() {
+  const url = window.location.href.toLowerCase();
+  const keywords = ["signup", "sign-up", "register", "create", "join", "new-account"];
+  return keywords.some(k => url.includes(k));
+}
+
 function createMenu(input, res, options = {}) {
   if (activeMenu) activeMenu.remove();
 
@@ -113,38 +119,41 @@ function createMenu(input, res, options = {}) {
     menu.appendChild(item);
   }
 
-  const genContainer = document.createElement("div");
-  genContainer.style = "padding:8px;cursor:pointer;color:#10b981;font-weight:600;display:flex;flex-direction:column;gap:4px;";
-  
-  const genLabel = document.createElement("span");
-  genLabel.textContent = "✨ Generate Strong Password";
-  genContainer.appendChild(genLabel);
+  // Only show generator if NO matching credential exists OR we are clearly on a registration/signup page
+  if (!res.credential || isRegistrationPage()) {
+    const genContainer = document.createElement("div");
+    genContainer.style = "padding:8px;cursor:pointer;color:#10b981;font-weight:600;display:flex;flex-direction:column;gap:4px;";
+    
+    const genLabel = document.createElement("span");
+    genLabel.textContent = "✨ Generate Strong Password";
+    genContainer.appendChild(genLabel);
 
-  const displayBox = document.createElement("div");
-  displayBox.style = "display:none;font-family:monospace;font-size:12px;background:#f3f4f6;padding:6px;border-radius:4px;color:#1f2937;word-break:break-all;margin-top:4px;border:1px dashed #10b981;";
-  genContainer.appendChild(displayBox);
+    const displayBox = document.createElement("div");
+    displayBox.style = "display:none;font-family:monospace;font-size:12px;background:#f3f4f6;padding:6px;border-radius:4px;color:#1f2937;word-break:break-all;margin-top:4px;border:1px dashed #10b981;";
+    genContainer.appendChild(displayBox);
 
-  genContainer.onclick = (e) => {
-    e.stopPropagation();
-    chrome.runtime.sendMessage({ type: "GENERATE_PASSWORD" }, (generateRes) => {
-      if (!generateRes?.ok || !generateRes.password) {
-        genLabel.textContent = "Unable to generate password";
-        return;
-      }
-      fillInput(input, generateRes.password);
-      displayBox.textContent = generateRes.password;
-      displayBox.style.display = "block";
-      genLabel.textContent = "✅ Password Filled!";
-      showSavePrompt(
-        window.location.hostname.replace("www.", ""),
-        getLikelyUsername(input),
-        generateRes.password
-      );
-      
-      setTimeout(() => { if(activeMenu === menu) menu.remove(); }, 4000);
-    });
-  };
-  menu.appendChild(genContainer);
+    genContainer.onclick = (e) => {
+      e.stopPropagation();
+      chrome.runtime.sendMessage({ type: "GENERATE_PASSWORD" }, (generateRes) => {
+        if (!generateRes?.ok || !generateRes.password) {
+          genLabel.textContent = "Unable to generate password";
+          return;
+        }
+        fillInput(input, generateRes.password);
+        displayBox.textContent = generateRes.password;
+        displayBox.style.display = "block";
+        genLabel.textContent = "✅ Password Filled!";
+        showSavePrompt(
+          window.location.hostname.replace("www.", ""),
+          getLikelyUsername(input),
+          generateRes.password
+        );
+        
+        setTimeout(() => { if(activeMenu === menu) menu.remove(); }, 4000);
+      });
+    };
+    menu.appendChild(genContainer);
+  }
 
   document.body.appendChild(menu);
   activeMenu = menu;
