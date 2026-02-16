@@ -84,7 +84,6 @@ function showUnlockOverlay(onSuccess) {
 
 function isRegistrationPage() {
   const url = window.location.href.toLowerCase();
-  const forms = Array.from(document.querySelectorAll("form"));
   const hasMultiplePasswords = document.querySelectorAll('input[type="password"]').length >= 2;
   const isSignup = ["signup", "sign-up", "register", "create", "join", "new-account"].some(k => url.includes(k));
   return isSignup || hasMultiplePasswords;
@@ -112,7 +111,6 @@ function createMenu(input, res, options = {}) {
     menu.appendChild(item);
   }
 
-  // Generator logic: Only show if on signup page OR no credential found
   if (isRegistrationPage() || !res.credential) {
     const genContainer = document.createElement("div");
     genContainer.style = "padding:8px;cursor:pointer;color:#10b981;font-weight:600;";
@@ -122,7 +120,9 @@ function createMenu(input, res, options = {}) {
       chrome.runtime.sendMessage({ type: "GENERATE_PASSWORD" }, (g) => {
         if (!g?.password) return;
         fillInput(input, g.password);
-        showSavePrompt(window.location.hostname.replace("www.", ""), getLikelyUsername(input), g.password);
+        getLikelyUsername(input, (u) => {
+            showSavePrompt(window.location.hostname.replace("www.", ""), u, g.password);
+        });
         menu.remove();
       });
     };
@@ -135,27 +135,74 @@ function createMenu(input, res, options = {}) {
   setTimeout(() => document.addEventListener("click", close), 10);
 }
 
-function getLikelyUsername(passwordInput) {
+function getLikelyUsername(passwordInput, callback) {
   const nearby = passwordInput?.form?.querySelector('input[type="email"], input[name*="email" i], input[type="text"]');
-  return nearby?.value?.trim() || "";
+  if (nearby?.value?.trim()) return callback(nearby.value.trim());
+
+  // Fallback to identity email if no field found
+  chrome.runtime.sendMessage({ type: "GET_IDENTITY" }, (res) => {
+    callback(res?.email || "");
+  });
 }
 
 function showSavePrompt(site, username, password) {
   if (activeSavePrompt) activeSavePrompt.remove();
   const wrapper = document.createElement("div");
-  wrapper.style = "position:fixed;top:20px;right:20px;z-index:2147483647;width:340px;background:#111827;color:#e5e7eb;border:1px solid #374151;border-radius:14px;box-shadow:0 18px 40px rgba(0,0,0,0.45);padding:14px;font-family:sans-serif;";
+  wrapper.style = "position:fixed;top:20px;right:20px;z-index:2147483647;width:340px;background:#111827;color:#e5e7eb;border:1px solid #374151;border-radius:14px;box-shadow:0 18px 40px rgba(0,0,0,0.45);padding:18px;font-family:sans-serif;";
+  
   wrapper.innerHTML = `
-    <div style="font-weight:600;margin-bottom:10px;">Save password to DPM?</div>
-    <div style="font-size:12px;color:#9ca3af;margin-bottom:12px;">${site}</div>
+    <div style="font-weight:600;margin-bottom:12px;font-size:15px;">Save password to DPM?</div>
+    <div style="margin-bottom:12px;">
+      <label style="display:block;font-size:11px;color:#9ca3af;margin-bottom:4px;text-transform:uppercase;">Username</label>
+      <input id="dpm-save-user" type="text" value="${username}" style="width:100%;background:#1f2937;border:1px solid #374151;color:white;padding:8px;border-radius:8px;box-sizing:border-box;font-size:13px;outline:none;">
+    </div>
+    <div style="margin-bottom:16px;">
+      <label style="display:block;font-size:11px;color:#9ca3af;margin-bottom:4px;text-transform:uppercase;">Confirm Master Password</label>
+      <input id="dpm-save-master" type="password" placeholder="Master Lock" style="width:100%;background:#1f2937;border:1px solid #374151;color:white;padding:8px;border-radius:8px;box-sizing:border-box;font-size:13px;outline:none;">
+    </div>
+    <div id="dpm-save-error" style="color:#fca5a5;font-size:11px;margin-bottom:12px;min-height:14px;"></div>
     <div style="display:flex;justify-content:flex-end;gap:8px;">
-      <button id="dpm-save-never" style="background:transparent;border:1px solid #4b5563;color:#d1d5db;padding:6px 12px;border-radius:6px;cursor:pointer;">Never</button>
-      <button id="dpm-save-confirm" style="background:#16a34a;border:none;color:white;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:600;">Save</button>
+      <button id="dpm-save-never" style="background:transparent;border:1px solid #4b5563;color:#d1d5db;padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;">Never</button>
+      <button id="dpm-save-confirm" style="background:#16a34a;border:none;color:white;padding:7px 16px;border-radius:8px;cursor:pointer;font-weight:600;font-size:12px;">Save Password</button>
     </div>
   `;
-  const save = wrapper.querySelector("#dpm-save-confirm");
-  save.onclick = () => {
-    chrome.runtime.sendMessage({ type: "ADD_CREDENTIAL", credential: { site, username, password } }, () => wrapper.remove());
+
+  const saveBtn = wrapper.querySelector("#dpm-save-confirm");
+  const masterInput = wrapper.querySelector("#dpm-save-master");
+  const userInput = wrapper.querySelector("#dpm-save-user");
+  const errorEl = wrapper.querySelector("#dpm-save-error");
+
+  saveBtn.onclick = () => {
+    const masterPassword = masterInput.value;
+    if (!masterPassword) return errorEl.textContent = "Master password required";
+    
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Verifying...";
+
+    // 1. Verify master password first
+    chrome.runtime.sendMessage({ type: "UNLOCK", masterPassword }, (unlockRes) => {
+      if (!unlockRes.ok) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Save Password";
+        return errorEl.textContent = "Incorrect Master Password";
+      }
+
+      // 2. If valid, perform the save
+      const credential = { site, username: userInput.value.trim(), password };
+      chrome.runtime.sendMessage({ type: "ADD_CREDENTIAL", credential }, (addRes) => {
+        if (addRes.ok) {
+          saveBtn.style.background = "#059669";
+          saveBtn.textContent = "Saved! ✓";
+          setTimeout(() => wrapper.remove(), 800);
+        } else {
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Save Password";
+          errorEl.textContent = addRes.error || "Save failed";
+        }
+      });
+    });
   };
+
   wrapper.querySelector("#dpm-save-never").onclick = () => wrapper.remove();
   document.body.appendChild(wrapper);
   activeSavePrompt = wrapper;
