@@ -85,7 +85,7 @@ function showUnlockOverlay(onSuccess) {
 function isRegistrationPage() {
   const url = window.location.href.toLowerCase();
   const hasMultiplePasswords = document.querySelectorAll('input[type="password"]').length >= 2;
-  const isSignup = ["signup", "sign-up", "register", "create", "join", "new-account"].some(k => url.includes(k));
+  const isSignup = ["signup", "sign-up", "register", "create", "join", "new-account", "settings/password", "change-password"].some(k => url.includes(k));
   return isSignup || hasMultiplePasswords;
 }
 
@@ -97,11 +97,36 @@ function createMenu(input, res, options = {}) {
   menu.style.top = (rect.bottom + 5) + "px";
   menu.style.left = rect.left + "px";
 
-  if (res.credential) {
+  const isSignup = isRegistrationPage();
+
+  // STRICT RULE 1: If it's a Signup/Password-Change page, DON'T show the saved account.
+  // We only show the Generator.
+  if (isSignup) {
+    const genContainer = document.createElement("div");
+    genContainer.style = "padding:10px;cursor:pointer;color:#10b981;font-weight:600;display:flex;align-items:center;gap:8px;";
+    genContainer.innerHTML = `<span style="font-size:16px;">✨</span> Generate Strong Password`;
+    genContainer.onclick = (e) => {
+      e.stopPropagation();
+      chrome.runtime.sendMessage({ type: "GENERATE_PASSWORD" }, (g) => {
+        if (!g?.password) return;
+        fillInput(input, g.password);
+        getLikelyUsername(input, (u) => {
+            showSavePrompt(window.location.hostname.replace("www.", ""), u, g.password);
+        });
+        menu.remove();
+      });
+    };
+    menu.appendChild(genContainer);
+  } 
+  // STRICT RULE 2: If it's a standard login page, only show the saved account.
+  else if (res.credential) {
     const item = document.createElement("div");
-    item.style = "padding:8px;cursor:pointer;border-bottom:1px solid #eee;display:flex;flex-direction:column;";
+    item.style = "padding:10px;cursor:pointer;border-radius:6px;display:flex;flex-direction:column;gap:2px;";
+    item.onmouseover = () => item.style.background = "#f3f4f6";
+    item.onmouseout = () => item.style.background = "transparent";
+    
     const label = res.locked ? "Locked Account" : res.credential.site;
-    item.innerHTML = `<strong style="color:#2563eb">${label}</strong><span style="font-size:11px;color:#666">${res.credential.username || ""}</span>`;
+    item.innerHTML = `<strong style="color:#2563eb;font-size:13px;">${label}</strong><span style="font-size:11px;color:#666">${res.credential.username || ""}</span>`;
     item.onclick = () => {
       showUnlockOverlay((credential) => {
         fillCredential(input, credential);
@@ -110,10 +135,10 @@ function createMenu(input, res, options = {}) {
     };
     menu.appendChild(item);
   }
-
-  if (isRegistrationPage() || !res.credential) {
+  // STRICT RULE 3: If no credential exists and not a signup page, show generator as fallback
+  else {
     const genContainer = document.createElement("div");
-    genContainer.style = "padding:8px;cursor:pointer;color:#10b981;font-weight:600;";
+    genContainer.style = "padding:10px;cursor:pointer;color:#10b981;font-weight:600;";
     genContainer.innerHTML = `✨ Generate Strong Password`;
     genContainer.onclick = (e) => {
       e.stopPropagation();
@@ -139,7 +164,6 @@ function getLikelyUsername(passwordInput, callback) {
   const nearby = passwordInput?.form?.querySelector('input[type="email"], input[name*="email" i], input[type="text"]');
   if (nearby?.value?.trim()) return callback(nearby.value.trim());
 
-  // Fallback to identity email if no field found
   chrome.runtime.sendMessage({ type: "GET_IDENTITY" }, (res) => {
     callback(res?.email || "");
   });
@@ -179,7 +203,6 @@ function showSavePrompt(site, username, password) {
     saveBtn.disabled = true;
     saveBtn.textContent = "Verifying...";
 
-    // 1. Verify master password first
     chrome.runtime.sendMessage({ type: "UNLOCK", masterPassword }, (unlockRes) => {
       if (!unlockRes.ok) {
         saveBtn.disabled = false;
@@ -187,7 +210,6 @@ function showSavePrompt(site, username, password) {
         return errorEl.textContent = "Incorrect Master Password";
       }
 
-      // 2. If valid, perform the save
       const credential = { site, username: userInput.value.trim(), password };
       chrome.runtime.sendMessage({ type: "ADD_CREDENTIAL", credential }, (addRes) => {
         if (addRes.ok) {
@@ -234,6 +256,13 @@ function scan() {
         proactiveMenuShown = true;
         const anchor = document.querySelector('input[type="password"]');
         if (anchor) createMenu(anchor, res);
+      } else {
+          // If no credential but we are on signup page, still show menu proactively
+          if (isRegistrationPage()) {
+              proactiveMenuShown = true;
+              const anchor = document.querySelector('input[type="password"]');
+              if (anchor) createMenu(anchor, { credential: null });
+          }
       }
     });
   }
