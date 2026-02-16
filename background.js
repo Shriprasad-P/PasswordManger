@@ -246,6 +246,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ ok: true, password: generatePassword() });
           break;
 
+        case "VERIFY_MASTER_PASSWORD":
+          if (!sessionState.unlocked || !sessionState.masterPassword) {
+            return sendResponse({ ok: false, error: "Vault is completely locked" });
+          }
+          if (message.password === sessionState.masterPassword) {
+            sendResponse({ ok: true });
+          } else {
+            sendResponse({ ok: false, error: "Incorrect Master Password" });
+          }
+          break;
+
         case "GET_CREDENTIAL_FOR_URL":
           if (!sessionState.unlocked) return sendResponse({ ok: false, error: "Locked" });
           const url = new URL(message.url).hostname.replace("www.", "");

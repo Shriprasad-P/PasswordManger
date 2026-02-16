@@ -37,6 +37,58 @@ function fillCredential(anchorInput, credential) {
   if (passField) fillInput(passField, credential.password);
 }
 
+function showUnlockOverlay(onSuccess) {
+  const overlay = document.createElement("div");
+  overlay.style = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:1000000;display:flex;align-items:center;justify-content:center;font-family:sans-serif;";
+  
+  const modal = document.createElement("div");
+  modal.style = "background:white;padding:20px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.2);width:300px;text-align:center;";
+  
+  modal.innerHTML = `
+    <div style="font-weight:700;margin-bottom:10px;color:#111827;">Unlock Vault to Fill</div>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:15px;">Enter your Master Password to confirm auto-fill.</div>
+    <input type="password" id="dpm-reauth-pass" placeholder="Master Password" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;margin-bottom:10px;box-sizing:border-box;outline:none;font-size:14px;">
+    <div id="dpm-reauth-error" style="color:#ef4444;font-size:11px;margin-bottom:10px;min-height:14px;"></div>
+    <div style="display:flex;gap:8px;">
+      <button id="dpm-reauth-cancel" style="flex:1;padding:10px;background:#f3f4f6;border:none;border-radius:8px;cursor:pointer;font-weight:600;color:#374151;">Cancel</button>
+      <button id="dpm-reauth-confirm" style="flex:1;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px;cursor:pointer;font-weight:600;">Unlock</button>
+    </div>
+  `;
+  
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  
+  const input = modal.querySelector("#dpm-reauth-pass");
+  const error = modal.querySelector("#dpm-reauth-error");
+  const cancel = modal.querySelector("#dpm-reauth-cancel");
+  const confirm = modal.querySelector("#dpm-reauth-confirm");
+  
+  input.focus();
+  
+  const attempt = () => {
+    const password = input.value;
+    if (!password) return;
+    confirm.disabled = true;
+    confirm.textContent = "Verifying...";
+    chrome.runtime.sendMessage({ type: "VERIFY_MASTER_PASSWORD", password }, (res) => {
+      if (res?.ok) {
+        overlay.remove();
+        onSuccess();
+      } else {
+        confirm.disabled = false;
+        confirm.textContent = "Unlock";
+        error.textContent = res?.error || "Incorrect password";
+        input.value = "";
+        input.focus();
+      }
+    });
+  };
+  
+  input.onkeydown = (e) => { if (e.key === "Enter") attempt(); };
+  confirm.onclick = attempt;
+  cancel.onclick = () => overlay.remove();
+}
+
 function createMenu(input, res, options = {}) {
   if (activeMenu) activeMenu.remove();
 
@@ -50,11 +102,13 @@ function createMenu(input, res, options = {}) {
   if (res.credential) {
     const item = document.createElement("div");
     item.style = "padding:8px;cursor:pointer;border-bottom:1px solid #eee;display:flex;flex-direction:column;";
-    const title = options.proactive ? "Fill Saved Credential" : res.credential.site;
+    const title = options.proactive ? "Unlock to Fill" : res.credential.site;
     item.innerHTML = `<strong style="color:#2563eb">${title}</strong><span style="font-size:11px;color:#666">${res.credential.username || ""}</span>`;
     item.onclick = () => {
-      fillCredential(input, res.credential);
-      menu.remove();
+      showUnlockOverlay(() => {
+        fillCredential(input, res.credential);
+        menu.remove();
+      });
     };
     menu.appendChild(item);
   }
