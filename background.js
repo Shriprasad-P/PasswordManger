@@ -52,7 +52,6 @@ async function ensureIdentityLoaded() {
 async function saveEncryptedVault(vault, masterPassword) {
   const payload = { vault, metadata: { updatedAt: new Date().toISOString(), identity: sessionState.identity } };
   
-  // FIX: Handle cases where PasswordCrypto might not be immediately available in Service Worker
   if (typeof PasswordCrypto === "undefined") {
     throw new Error("Cryptographic engine is not loaded yet.");
   }
@@ -80,6 +79,45 @@ function siteMatchesHost(site, host) {
   if (!normalizedSite || !normalizedHost) return false;
   return normalizedHost === normalizedSite || normalizedHost.endsWith(`.${normalizedSite}`);
 }
+
+// --- Health Audit Logic ---
+function normalizeCategory(category) {
+  return VALID_CATEGORIES.has(category) ? category : "Personal";
+}
+
+function evaluateSecurity(password) {
+  const value = typeof password === "string" ? password : "";
+  const checks = [
+    /[a-z]/.test(value),
+    /[A-Z]/.test(value),
+    /[0-9]/.test(value),
+    /[^A-Za-z0-9]/.test(value)
+  ];
+  const complexity = checks.filter(Boolean).length;
+  const weak = value.length < 10 || complexity < 3;
+  return { weak, length: value.length, complexity, label: weak ? "Weak" : "Secure" };
+}
+
+function buildAuditedCredentials(vault) {
+  const passwordUsage = new Map();
+  vault.forEach((credential) => {
+    if (!passwordUsage.has(credential.password)) {
+      passwordUsage.set(credential.password, new Set());
+    }
+    passwordUsage.get(credential.password).add((credential.site || "").toLowerCase());
+  });
+
+  return vault.map((credential) => {
+    const usedSites = passwordUsage.get(credential.password) || new Set();
+    return {
+      ...credential,
+      category: normalizeCategory(credential.category),
+      security: evaluateSecurity(credential.password),
+      reused: usedSites.size > 1
+    };
+  });
+}
+// ---------------------------
 
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name === "popup") {
@@ -109,7 +147,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case "UNLOCK":
           const data = await chrome.storage.local.get(STORAGE_KEY);
           if (!data[STORAGE_KEY]) {
-            // First time unlock/creation
             sessionState.unlocked = true;
             sessionState.masterPassword = message.masterPassword;
             sessionState.vault = [];
@@ -166,7 +203,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case "SET_IDENTITY":
           sessionState.identity = { name: message.name, email: message.email };
           await chrome.storage.local.set({ [IDENTITY_STORAGE_KEY]: sessionState.identity });
-          // Ensure we sync or initialize the vault upon identity creation
           if (sessionState.unlocked && sessionState.masterPassword) {
             await saveEncryptedVault(sessionState.vault, sessionState.masterPassword);
           }
@@ -179,12 +215,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break;
 
         case "LIST_CREDENTIALS":
-          sendResponse({ ok: true, credentials: sessionState.vault });
+          sendResponse({ ok: true, credentials: buildAuditedCredentials(sessionState.vault) });
           break;
 
         case "ADD_CREDENTIAL":
           if (!sessionState.unlocked || !sessionState.masterPassword) return sendResponse({ ok: false, error: "Locked" });
           sessionState.vault.push({ id: crypto.randomUUID(), ...message.credential });
+          await saveEncryptedVault(sessionState.vault, sessionState.masterPassword);
+          sendResponse({ ok: true });
+          break;
+
+        case "DELETE_CREDENTIAL":
+          if (!sessionState.unlocked || !sessionState.masterPassword) return sendResponse({ ok: false, error: "Locked" });
+          sessionState.vault = sessionState.vault.filter(c => c.id !== message.id);
           await saveEncryptedVault(sessionState.vault, sessionState.masterPassword);
           sendResponse({ ok: true });
           break;
