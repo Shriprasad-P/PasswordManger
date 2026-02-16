@@ -2,10 +2,14 @@ const ui = {
   onboarding: document.getElementById("onboardingPanel"),
   locked: document.getElementById("lockedPanel"),
   dashboard: document.getElementById("dashboardPanel"),
+  identityDisplay: document.getElementById("identityDisplay"),
+  identityEditPanel: document.getElementById("identityEditPanel"),
   status: document.getElementById("status"),
   credentials: document.getElementById("credentials"),
   headerName: document.getElementById("headerName"),
   headerEmail: document.getElementById("headerEmail"),
+  editName: document.getElementById("editName"),
+  editEmail: document.getElementById("editEmail"),
   credentialSearch: document.getElementById("credentialSearch"),
   category: document.getElementById("category")
 };
@@ -191,6 +195,34 @@ document.getElementById("addBtn").onclick = async () => {
   document.getElementById("password").value = "";
   ui.category.value = "Personal";
   refresh();
+};
+
+ui.identityDisplay.onclick = () => {
+  ui.editName.value = ui.headerName.textContent;
+  ui.editEmail.value = ui.headerEmail.textContent;
+  ui.identityEditPanel.classList.remove("hidden");
+};
+
+document.getElementById("cancelEditBtn").onclick = () => {
+  ui.identityEditPanel.classList.add("hidden");
+};
+
+document.getElementById("saveIdentityBtn").onclick = async () => {
+  const name = ui.editName.value.trim();
+  const email = ui.editEmail.value.trim();
+  
+  if (!name || !email) {
+    ui.status.textContent = "Name and Email cannot be empty.";
+    return;
+  }
+
+  const res = await api("SET_IDENTITY", { name, email });
+  if (res.ok) {
+    ui.identityEditPanel.classList.add("hidden");
+    refresh();
+  } else {
+    ui.status.textContent = res.error;
+  }
 };
 
 ui.credentialSearch?.addEventListener("input", renderCredentials);
